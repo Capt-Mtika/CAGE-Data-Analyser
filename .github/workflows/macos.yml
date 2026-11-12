@@ -3,6 +3,7 @@ on:
   workflow_dispatch:
   push:
     paths:
+      - '.github/workflows/macos.yml'
       - 'package.json'
       - 'src/**'
       - 'src-tauri/**'
@@ -26,7 +27,7 @@ jobs:
         run: |
           set -e
           bundle=src-tauri/target/aarch64-apple-darwin/release/bundle
-          lipo -verify_arch arm64 "$bundle/macos/CAGE Crop Intelligence.app/Contents/MacOS/"*
+          lipo "$bundle/macos/CAGE Crop Intelligence.app/Contents/MacOS/cage-crop-intelligence" -verify_arch arm64
           hdiutil verify "$bundle"/dmg/*.dmg
       - uses: actions/upload-artifact@v4
         with:
