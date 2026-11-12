@@ -1,0 +1,16 @@
+[package]
+name = "cage-crop-intelligence"
+version = "0.1.0"
+description = "Offline CAGE Crop Intelligence desktop application"
+authors = ["CAGE"]
+edition = "2021"
+
+[lib]
+name = "cage_crop_intelligence_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
