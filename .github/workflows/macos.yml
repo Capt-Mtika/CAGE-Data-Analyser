@@ -1,0 +1,35 @@
+name: Build macOS installer
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'package.json'
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'vite.config.js'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: rustup target add aarch64-apple-darwin
+      - run: npm install
+      - run: npm test
+      - run: npm run desktop:build
+      - name: Verify installer
+        run: |
+          set -e
+          bundle=src-tauri/target/aarch64-apple-darwin/release/bundle
+          lipo -verify_arch arm64 "$bundle/macos/CAGE Crop Intelligence.app/Contents/MacOS/"*
+          hdiutil verify "$bundle"/dmg/*.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CAGE-Crop-Intelligence-macOS-arm64
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
