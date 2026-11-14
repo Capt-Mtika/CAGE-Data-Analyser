@@ -4,23 +4,79 @@ import {fromBlob} from 'geotiff';
 import {createIcons, icons} from 'lucide';
 import {jsPDF} from 'jspdf';
 import {screenMultiIndex} from './anomaly.js';
+import {addGeoTiffs, destroyGeoMap, mountGeoMap, mapZoom, mapFit} from './geo-workspace.js';
 
 const app=document.getElementById('app');
 const icon=(name)=>`<i data-lucide="${name}"></i>`;
-const state={layers:{},primary:'NDVI',selected:'NDVI',isDemo:true,analysed:false,valid:false,issue:null,mode3d:true,yaw:-.45,pitch:.67,zoom:1.03,panX:0,panY:0,contours:true,boundary:true,zones:true,crop:'Maize',stage:'Vegetative',name:'Illustrative field / demo data',stats:null};
+const state={layers:{},primary:'NDVI',selected:'NDVI',isDemo:true,analysed:false,valid:false,issue:null,mode3d:true,osmMode:false,yaw:-.45,pitch:.67,zoom:1.03,panX:0,panY:0,contours:true,boundary:true,zones:true,crop:'Maize',stage:'Vegetative',name:'Illustrative field / demo data',stats:null};
 const allowed=['NDVI','NDRE','LCI','VARI','GNDVI','SAVI','DSM','DTM'];
 function color(v,lo,hi,terrain=false){let colors=terrain?[[56,103,108],[130,156,123],[195,181,135],[236,211,159]]:[[215,81,66],[235,166,68],[240,221,115],[114,188,116],[41,137,92]];let t=Math.max(0,Math.min(.999,(v-lo)/(hi-lo)||0)),a=t*(colors.length-1),i=Math.floor(a),f=a-i;return colors[i].map((n,k)=>Math.round(n*(1-f)+colors[i+1][k]*f));}
 function fieldDemo(){const w=150,h=120,layers={};for(let name of ['NDVI','NDRE','LCI','VARI','DTM','DSM'])layers[name]={data:new Float32Array(w*h),width:w,height:h,crs:'SIMULATED',origin:[0,0],resolution:[1,1],isDemo:true};for(let y=0;y<h;y++)for(let x=0;x<w;x++){const u=x/w,v=y/h,g=Math.exp(-(((u-.74)/.15)**2+((v-.67)/.15)**2)),g2=Math.exp(-(((u-.22)/.15)**2+((v-.24)/.18)**2)),n=.02*Math.sin(x*.31)*Math.cos(y*.21);let z=1010+20*u+10*v+4*Math.sin(u*7)*Math.cos(v*6);let k=y*w+x;layers.NDVI.data[k]=.76-.42*g-.22*g2+n;layers.NDRE.data[k]=.38-.22*g-.12*g2+n*.5;layers.LCI.data[k]=.48-.29*g-.14*g2+n*.8;layers.VARI.data[k]=.22-.21*g-.13*g2+n;layers.DTM.data[k]=z;layers.DSM.data[k]=z+1.8-.7*g}return layers;}
-function summary(arr){let a=Array.from(arr).filter(Number.isFinite).sort((x,y)=>x-y);if(!a.length)return null;return{count:a.length,min:a[0],max:a.at(-1),mean:a.reduce((s,v)=>s+v,0)/a.length,p20:a[Math.floor((a.length-1)*.2)],p50:a[Math.floor((a.length-1)*.5)],p80:a[Math.floor((a.length-1)*.8)]}}
+function summary(arr){if(!arr)return null;let a=Array.from(arr).filter(Number.isFinite).sort((x,y)=>x-y);if(!a.length)return null;return{count:a.length,min:a[0],max:a.at(-1),mean:a.reduce((s,v)=>s+v,0)/a.length,p20:a[Math.floor((a.length-1)*.2)],p50:a[Math.floor((a.length-1)*.5)],p80:a[Math.floor((a.length-1)*.8)]}}
 function sampleLayer(data,w,h,tw=150,th=120){const r=new Float32Array(tw*th);for(let j=0;j<th;j++)for(let i=0;i<tw;i++){r[j*tw+i]=data[Math.min(h-1,Math.floor((j+.5)*h/th))*w+Math.min(w-1,Math.floor((i+.5)*w/tw))]}return r}
-function refresh(){app.innerHTML=`
+function refresh(){destroyGeoMap();app.innerHTML=`
  <header class="topbar"><div class="identity"><div class="logo"><div class="logomark"></div>CAGE</div><div class="product">Crop Intelligence</div></div><div class="actions"><button class="btn" id="importtop">${icon('cloud-upload')}<span>Import data</span></button><button class="btn primary" id="analyse">${icon('play')}<span>Run analysis</span></button><span class="avatar">AM</span></div></header>
  <nav class="workflow">${['Import','Validate','Analyse','Insights','Report'].map((n,i)=>`${i?'<div class="flowline"></div>':''}<div class="flowstep ${state.analysed?(i<3?'complete':i===3?'current':''):state.valid?(i<2?'complete':i===2?'current':''):i===0?'current':''}"><span class="circle">${state.analysed&&i<3||state.valid&&i<2?icon('check'):i+1}</span>${n}</div>`).join('')}</nav>
  <div class="workspace"><aside class="sidebar"><div class="eyebrow">PROJECT</div><div class="projectselect">${icon('folder')}<span id="projectname">${escapeHTML(state.isDemo?'Demo field':state.name)}</span>${icon('chevron-down')}</div><button class="navitem active">${icon('map')}Analysis</button><button class="navitem" id="reportsnav">${icon('file-text')}Reports</button><div class="rule"></div><div class="sidehead"><b>INPUT DATA</b><span>${state.isDemo?'Demo':'Local files'}</span></div><div class="drop" id="drop">${icon('cloud-upload')}<strong>Drag and drop GeoTIFFs</strong><button id="browse">or select files</button></div><input id="fileinput" type="file" accept=".tif,.tiff,image/tiff" multiple hidden/><div class="filelist" id="files"></div><div class="rule"></div><div class="sidehead"><b>LAYERS</b><span>${Object.keys(state.layers).length} loaded</span></div><div id="layers"></div><div class="rule"></div><label class="eyebrow" for="crop">CROP</label><select id="crop" class="select">${['Maize','Soybean','Wheat','Rice','Groundnut','Other'].map(c=>`<option ${state.crop===c?'selected':''}>${c}</option>`).join('')}</select><label class="eyebrow" for="stage" style="display:block;margin-top:13px">GROWTH STAGE</label><select id="stage" class="select">${['Emergence','Vegetative','Reproductive','Senescence'].map(c=>`<option ${state.stage===c?'selected':''}>${c}</option>`).join('')}</select><p class="smallnote">Files are processed inside this browser session. Nothing is uploaded to a server in this version.</p></aside>
  <main class="maparea"><canvas class="mapcanvas" id="map"></canvas><div class="maptop"><div class="maptitle"><h1 id="mapname">${escapeHTML(state.name)}</h1><p id="mapdesc">${state.isDemo?'Terrain Studio · Simulated multispectral surface · No confirmed diagnosis':'Terrain Studio · Local imported data · Relative spectral screening'}</p></div><div class="viewbar"><button id="view3" class="${state.mode3d?'active':''}">3D view</button><button id="view2" class="${!state.mode3d?'active':''}">Top view</button></div></div><div class="maptools"><button class="iconbtn" id="zoomplus" aria-label="Zoom in">${icon('plus')}</button><button class="iconbtn" id="zoomminus" aria-label="Zoom out">${icon('minus')}</button><button class="iconbtn" id="mapreset" aria-label="Reset orientation">${icon('locate-fixed')}</button></div><div class="legend"><b id="legendname">${state.selected} · ${state.selected==='DTM'||state.selected==='DSM'?'Elevation values':'Relative index values'}</b><div class="gradient" id="legendgradient"></div><div class="legendlabels"><span>Lower</span><span>Within-field variation</span><span>Higher</span></div></div><div class="modebadge">${state.isDemo?'SIMULATED TERRAIN':'LOCALLY PROCESSED RASTER'} · CAGE DRONES & DATA</div></main>
  <aside class="insights"><h2>Insights</h2><div class="muted">Field observations and recommended checks</div><div id="insightbody"></div><button class="btn primary reportbtn" id="report" ${state.analysed?'':'disabled'}>${icon('file-down')}Export PDF report ${icon('arrow-right')}</button><p class="smallnote">Remote-sensing indices indicate spatial variation; they do not confirm crop disease, nutrient deficiency or a treatment requirement.</p></aside></div>
  <div class="overlay" id="modal"><div class="dialog"><h2>New field analysis</h2><p class="muted">Give your project a name and choose the crop context. Your raster files stay on this device.</p><div class="row"><label>Project name<input id="newname" value="Farm analysis"></label><label>Crop<select id="newcrop">${['Maize','Soybean','Wheat','Rice','Groundnut','Other'].map(c=>`<option>${c}</option>`).join('')}</select></label></div><div class="dialogfooter"><button class="btn" id="cancelmodal">Cancel</button><button class="btn primary" id="choosefiles">Choose GeoTIFF files</button></div></div></div>`;
- createIcons({icons}); const map=document.getElementById('map');canvas=map;ctx=map.getContext('2d');wire();drawSide();updateInsights();resize();
+ createIcons({icons}); const map=document.getElementById('map');canvas=map;ctx=map.getContext('2d');wire();drawSide();updateInsights();resize();setupGeoUI();
+}
+function setupGeoUI(){
+  const area=document.querySelector('.maparea');
+  area.insertAdjacentHTML('afterbegin','<div id="osm-map" class="osm-map" hidden></div>');
+  const button=document.createElement('button');button.id='viewosm';button.textContent='OpenStreetMap';
+  document.querySelector('.viewbar').append(button);
+  const activate=mode=>{
+    state.osmMode=mode==='osm';state.mode3d=mode==='3d';
+    document.getElementById('map').hidden=state.osmMode;
+    ['view3','view2','viewosm'].forEach((id,i)=>document.getElementById(id).classList.toggle('active',i===(mode==='3d'?0:mode==='2d'?1:2)));
+    if(mode==='2d')state.yaw=0;
+    mountGeoMap(state,setNotice);
+    if(!state.osmMode)paint();
+  };
+  document.getElementById('view3').onclick=()=>activate('3d');
+  document.getElementById('view2').onclick=()=>activate('2d');
+  button.onclick=()=>activate('osm');
+  document.getElementById('zoomplus').onclick=()=>{if(state.osmMode)mapZoom(1);else{state.zoom=Math.min(2.8,state.zoom*1.15);paint()}};
+  document.getElementById('zoomminus').onclick=()=>{if(state.osmMode)mapZoom(-1);else{state.zoom=Math.max(.5,state.zoom/1.15);paint()}};
+  document.getElementById('mapreset').onclick=()=>{if(state.osmMode)mapFit(state);else{state.yaw=-.45;state.pitch=.67;state.zoom=1.03;state.panX=state.panY=0;paint()}};
+  const input=document.getElementById('fileinput'),drop=document.getElementById('drop');
+  document.getElementById('analyse').onclick=()=>{
+    const indices=Object.values(state.layers).filter(l=>l.data&&!['DSM','DTM'].includes(l.name));
+    if(!indices.length)return setNotice('Add a numeric vegetation-index GeoTIFF (such as NDVI.tif) to run spectral analysis. RGB orthomosaics are map-only.','error');
+    const base=indices[0];
+    if(indices.some(l=>l.width!==base.width||l.height!==base.height||l.crs!==base.crs||
+      !l.origin||!base.origin||!l.resolution||!base.resolution||
+      l.origin.some((v,i)=>Math.abs(v-base.origin[i])>1e-5)||
+      l.resolution.some((v,i)=>Math.abs(v-base.resolution[i])>1e-6)))
+      return setNotice('Spectral analysis needs aligned index rasters on the same grid. You can still view each layer on OpenStreetMap.','error');
+    state.primary=state.layers.NDVI?'NDVI':base.name;
+    analyse();
+  };
+  input.onchange=async()=>{const files=Array.from(input.files);input.value='';document.getElementById('modal').classList.remove('open');await addGeoTiffs(files,state,refresh,setNotice)};
+  drop.ondrop=async e=>{e.preventDefault();drop.classList.remove('dragover');await addGeoTiffs(e.dataTransfer.files,state,refresh,setNotice)};
+  const decorate=()=>{
+    document.querySelectorAll('.fileitem').forEach((row,i)=>{
+      const name=Object.keys(state.layers)[i];
+      if(row.querySelector('.remove-tiff'))return;
+      const remove=document.createElement('button');remove.className='remove-tiff';remove.title='Remove '+name;remove.setAttribute('aria-label','Remove '+name);remove.textContent='×';
+      remove.onclick=()=>{
+        delete state.layers[name];const names=Object.keys(state.layers);
+        if(state.selected===name)state.selected=names[0]||'';
+        state.primary=state.layers.NDVI?'NDVI':names.find(n=>state.layers[n].data&&!['DTM','DSM'].includes(n))||names.find(n=>state.layers[n].data)||'';
+        state.analysed=false;state.stats=null;state.valid=names.length>0;state.isDemo=false;
+        refresh();setNotice(name+' removed. Other GeoTIFF layers remain available.','success');
+      };row.append(remove);
+    });
+    document.querySelectorAll('[data-layer]').forEach(b=>b.onclick=()=>{
+      state.selected=b.dataset.layer;drawSide();decorate();
+      document.getElementById('legendname').textContent=state.selected+' · '+(['DTM','DSM'].includes(state.selected)?'Elevation values':'Relative index values');
+      if(state.osmMode)mountGeoMap(state,setNotice);else paint();
+    });
+  };
+  decorate();activate(state.osmMode?'osm':state.mode3d?'3d':'2d');
 }
 function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function drawSide(){let names=Object.keys(state.layers);document.getElementById('files').innerHTML=names.map(n=>`<div class="fileitem">${icon('layers')}<span class="filename">${n}.tif ${state.isDemo?'<small>· demo</small>':''}</span><span class="status">${icon('check-circle-2')}</span></div>`).join('');document.getElementById('layers').innerHTML=names.map(n=>`<button class="layeritem ${state.selected===n?'active':''}" data-layer="${n}"><span class="colorchip" style="${n==='DTM'||n==='DSM'?'background:linear-gradient(135deg,#46767a,#b1b88f,#e7d8b7)':''}"></span><span>${n}<small>${n==='NDVI'?'Vegetation vigour':n==='NDRE'?'Red-edge response':n==='LCI'?'Chlorophyll-related':n==='VARI'?'Visible greenness':n==='DSM'?'Surface model':n==='DTM'?'Terrain model':'Vegetation index'}</small></span></button>`).join('');createIcons({icons});document.querySelectorAll('[data-layer]').forEach(b=>b.onclick=()=>{state.selected=b.dataset.layer;drawSide();document.getElementById('legendname').textContent=state.selected+' · '+(['DTM','DSM'].includes(state.selected)?'Elevation values':'Relative index values');paint()})}
