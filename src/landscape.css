@@ -21,3 +21,12 @@
   .insights { grid-template-columns:140px minmax(0,1fr) 170px; padding:16px; gap:12px; }
   .insights>.reportbtn { font-size:11px; padding:9px; }
 }
+/* GIS map mode and individual GeoTIFF layer management */
+.osm-map{position:absolute;inset:0;z-index:1;background:#e6eef0}
+.osm-map[hidden],.mapcanvas[hidden]{display:none!important}
+.osm-map .leaflet-control-attribution{font-size:10px}
+.maptop{z-index:450}
+.maptools,.legend,.modebadge{z-index:450}
+.remove-tiff{flex:none;border:0;background:#f6e9e8;color:#b04c43;border-radius:6px;font-size:18px;line-height:23px;width:25px;height:25px;cursor:pointer}
+.remove-tiff:hover{background:#f4d4d0}
+.fileitem .remove-tiff{margin-left:auto}
