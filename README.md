@@ -14,6 +14,22 @@ An **offline-first Apple Silicon macOS application scaffold**, derived from the 
 
 ## Build on an Apple Silicon Mac
 
+### Easiest local browser test (Python launcher)
+
+Download or clone this repository and open Terminal in its folder. With Python 3 installed, run:
+
+```bash
+python3 run_local.py --bootstrap-node
+```
+
+The script uses only Python's standard library. It checks for Node.js 20+ and npm, optionally installs Node.js using an **existing Homebrew installation** if missing, installs exact npm dependencies from `package-lock.json`, builds the browser interface, and serves it at `http://127.0.0.1:8765/` (opening your default browser). Press Ctrl+C to stop.
+
+If Homebrew is not installed, install Node.js 20+ yourself from nodejs.org first and run `python3 run_local.py`. The script does **not** install Python, Homebrew, macOS system packages or Apple signing certificates. Use `--install-only` to build without starting the local server, `--no-browser` to skip opening a tab, or `--port 9000` to change ports.
+
+This launcher starts the existing **local Crop Intelligence interface**. It is not yet the Spexi-style mission network, raw-photo photogrammetry engine, or a native `.app`/`.dmg` installer.
+
+### Native macOS application build
+
 1. Install Xcode Command Line Tools: `xcode-select --install`.
 2. Install Rust (rustup), Node.js LTS, and Apple's required macOS development components.
 3. Open Terminal in this project folder and run `npm install`.
