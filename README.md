@@ -4,6 +4,9 @@ An **offline-first Apple Silicon macOS application scaffold**, derived from the 
 
 ## Included in this starter
 
+- OpenStreetMap 2D basemap mode (online tiles) with automatic positioning of georeferenced GeoTIFF overlays in EPSG:4326, EPSG:3857 or WGS84 UTM zones. The map is **not** available offline unless a separate licensed tile source/cache is configured.
+- Add/remove individual `.tif`/`.tiff` layers without replacing the others. Single-band numeric index rasters are used for analysis; three/four-band RGB orthomosaics are display-only. Unreferenced, rotated and unsupported-CRS images are rejected for automatic positioning to avoid misleading locations.
+
 - Tauri 2 application shell targeting `aarch64-apple-darwin`, with a `.app`/`.dmg` bundle configuration.
 - Desktop landscape interface: left-side project/layers, central 2D/3D raster surface, full-width Insights dock at the bottom.
 - Local **single-band index GeoTIFF** loading: `NDVI.tif`, `NDRE.tif`, `LCI.tif`, `VARI.tif`, `GNDVI.tif`, `SAVI.tif`; optional `DTM.tif` and `DSM.tif`.
@@ -47,7 +50,7 @@ The demonstration field is synthetic. To analyse your own data, export **single-
 This is a **working desktop scaffold and statistical analysis prototype**, not a certified agronomic diagnostic tool or a complete large-raster workstation yet.
 
 - Current JavaScript GeoTIFF loader is bounded to 18 million pixels **per layer** and loads numeric raster arrays into memory; for 8 GB Macs, begin with cropped or downsampled inputs and avoid many large layers at once. The next processing tier should use tile-streamed GDAL and on-disk caches.
-- RGB orthomosaic display, OBJ/PLY/LAZ point-cloud and textured-mesh import are **not yet implemented**. Current 3D view is an elevation raster visualization when DTM/DSM is available.
+- RGB GeoTIFF orthomosaics can now be displayed in the online basemap using an in-memory preview (8-bit display assumption), but full-resolution tiled RGB rendering, OBJ/PLY/LAZ point-cloud and textured-mesh import are **not yet implemented**. Current 3D view is an elevation raster visualization when DTM/DSM is available.
 - Raster extent is not the same as measured crop area. Area calculation is only indicative for projected metre-based CRS and currently does not apply an explicit crop mask.
 - Lower-index pixels are **relative to a given field**, not a universal stress classification. Multiple indices may share sensor artifacts, shadows, or soil-background effects, so consensus does not prove a cause.
 - The local model adapter is a contract for installing a vetted Core ML/ONNX model later; it does not silently download models or substitute an LLM-generated diagnosis.
